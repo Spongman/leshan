@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright (c) 2016 Sierra Wireless and others.
+ * Copyright (c) 2023 Sierra Wireless and others.
  *
  * All rights reserved. This program and the accompanying materials
  * are made available under the terms of the Eclipse Public License v2.0
@@ -23,7 +23,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 import redis.clients.jedis.util.Pool;
 
-public class RedisSecurityTest extends SecurityTest {
+public class RedisSecurityStoreTest extends SecurityStoreTest {
 
     @Override
     protected LeshanTestServerBuilder givenServerUsing(Protocol givenProtocol) {

@@ -65,10 +65,13 @@ import org.eclipse.leshan.core.node.codec.DefaultLwM2mEncoder;
 import org.eclipse.leshan.core.node.codec.LwM2mDecoder;
 import org.eclipse.leshan.core.node.codec.LwM2mEncoder;
 import org.eclipse.leshan.core.oscore.OscoreSetting;
+import org.eclipse.leshan.core.request.ContentFormat;
 import org.eclipse.leshan.core.util.TestLwM2mId;
 import org.eclipse.leshan.core.util.X509CertUtil;
 import org.eclipse.leshan.integration.tests.util.IntegrationTestHelper.TestDevice;
 import org.eclipse.leshan.server.LeshanServer;
+import org.eclipse.leshan.server.bootstrap.LeshanBootstrapServer;
+import org.eclipse.leshan.server.bootstrap.endpoint.LwM2mBootstrapServerEndpoint;
 import org.eclipse.leshan.server.endpoint.LwM2mServerEndpoint;
 
 public class LeshanTestClientBuilder extends LeshanClientBuilder {
@@ -77,22 +80,23 @@ public class LeshanTestClientBuilder extends LeshanClientBuilder {
 
     private String endpointName;
     private final Protocol protocolToUse;
+
     private LeshanServer server;
+    private LeshanBootstrapServer bootstrapServer;
+
     private long lifetime = 300l; // use large lifetime by default
     private final ObjectsInitializer initializer;
     private final DefaultRegistrationEngineFactory engineFactory = new DefaultRegistrationEngineFactory();
+    private ContentFormat[] supportedContentFormat;
 
     private String pskIdentity;
     private byte[] pskKey;
-
     private PrivateKey clientPrivateKey;
     private PublicKey clientPublicKey;
     private PublicKey serverPublicKey;
     private X509Certificate clientCertificate;
     private X509Certificate serverCertificate;
-
     private CertificateUsage certificageUsage;
-
     private OscoreSetting oscoreSetting;
 
     // server.getEndpoint(Protocol.COAP).getURI().toString()
@@ -106,40 +110,69 @@ public class LeshanTestClientBuilder extends LeshanClientBuilder {
         initializer.setClassForObject(LwM2mId.ACCESS_CONTROL, DummyInstanceEnabler.class);
         initializer.setInstancesForObject(TestLwM2mId.TEST_OBJECT, new LwM2mTestObject());
 
-        // Build Client
-        setDecoder(new DefaultLwM2mDecoder(true));
-        setEncoder(new DefaultLwM2mEncoder(true));
         setDataSenders(new ManualDataSender());
     }
 
     @Override
     public LeshanTestClient build() {
-        LwM2mServerEndpoint endpoint = server.getEndpoint(protocolToUse);
-        URI uri = endpoint.getURI();
-        int serverID = 12345;
-
         try {
-            if (pskIdentity != null && pskKey != null) {
-                initializer.setInstancesForObject(LwM2mId.SECURITY,
-                        Security.psk(uri.toString(), serverID, pskIdentity.getBytes(), pskKey));
-            } else if (clientPublicKey != null && clientPrivateKey != null) {
-                initializer.setInstancesForObject(LwM2mId.SECURITY, Security.rpk(uri.toString(), serverID,
-                        clientPublicKey.getEncoded(), clientPrivateKey.getEncoded(), serverPublicKey.getEncoded()));
-            } else if (clientCertificate != null && clientPrivateKey != null) {
-                initializer.setInstancesForObject(LwM2mId.SECURITY,
-                        Security.x509(uri.toString(), serverID, clientCertificate.getEncoded(),
-                                clientPrivateKey.getEncoded(), serverCertificate.getEncoded(), certificageUsage.code));
-            } else {
-                if (oscoreSetting != null) {
-                    Oscore oscoreObject = new Oscore(12345, oscoreSetting);
-                    initializer.setInstancesForObject(OSCORE, oscoreObject);
+            // connect to LWM2M Server
+            if (server != null) {
+                LwM2mServerEndpoint endpoint = server.getEndpoint(protocolToUse);
+                URI uri = endpoint.getURI();
+                int serverID = 12345;
+
+                if (pskIdentity != null && pskKey != null) {
                     initializer.setInstancesForObject(LwM2mId.SECURITY,
-                            Security.oscoreOnly(uri.toString(), serverID, oscoreObject.getId()));
+                            Security.psk(uri.toString(), serverID, pskIdentity.getBytes(), pskKey));
+                } else if (clientPublicKey != null && clientPrivateKey != null) {
+                    initializer.setInstancesForObject(LwM2mId.SECURITY, Security.rpk(uri.toString(), serverID,
+                            clientPublicKey.getEncoded(), clientPrivateKey.getEncoded(), serverPublicKey.getEncoded()));
+                } else if (clientCertificate != null && clientPrivateKey != null) {
+                    initializer.setInstancesForObject(LwM2mId.SECURITY,
+                            Security.x509(uri.toString(), serverID, clientCertificate.getEncoded(),
+                                    clientPrivateKey.getEncoded(), serverCertificate.getEncoded(),
+                                    certificageUsage.code));
                 } else {
-                    initializer.setInstancesForObject(LwM2mId.SECURITY, Security.noSec(uri.toString(), serverID));
+                    if (oscoreSetting != null) {
+                        Oscore oscoreObject = new Oscore(111, oscoreSetting);
+                        initializer.setInstancesForObject(OSCORE, oscoreObject);
+                        initializer.setInstancesForObject(LwM2mId.SECURITY,
+                                Security.oscoreOnly(uri.toString(), serverID, oscoreObject.getId()));
+                    } else {
+                        initializer.setInstancesForObject(LwM2mId.SECURITY, Security.noSec(uri.toString(), serverID));
+                    }
                 }
+                initializer.setInstancesForObject(LwM2mId.SERVER, new Server(serverID, lifetime));
             }
-            initializer.setInstancesForObject(LwM2mId.SERVER, new Server(serverID, lifetime));
+            // connect to LWM2M Bootstrap Server
+            else if (bootstrapServer != null) {
+                LwM2mBootstrapServerEndpoint endpoint = bootstrapServer.getEndpoint(protocolToUse);
+                URI uri = endpoint.getURI();
+
+                if (pskIdentity != null && pskKey != null) {
+                    initializer.setInstancesForObject(LwM2mId.SECURITY,
+                            Security.pskBootstrap(uri.toString(), pskIdentity.getBytes(), pskKey));
+                } else if (clientPublicKey != null && clientPrivateKey != null) {
+                    initializer.setInstancesForObject(LwM2mId.SECURITY, Security.rpkBootstrap(uri.toString(),
+                            clientPublicKey.getEncoded(), clientPrivateKey.getEncoded(), serverPublicKey.getEncoded()));
+                } else if (clientCertificate != null && clientPrivateKey != null) {
+                    initializer.setInstancesForObject(LwM2mId.SECURITY,
+                            Security.x509Bootstrap(uri.toString(), clientCertificate.getEncoded(),
+                                    clientPrivateKey.getEncoded(), serverCertificate.getEncoded(),
+                                    certificageUsage.code));
+                } else {
+                    if (oscoreSetting != null) {
+                        Oscore oscoreObject = new Oscore(12345, oscoreSetting);
+                        initializer.setInstancesForObject(OSCORE, oscoreObject);
+                        initializer.setInstancesForObject(LwM2mId.SECURITY,
+                                Security.oscoreOnlyBootstrap(uri.toString(), oscoreObject.getId()));
+                    } else {
+                        initializer.setInstancesForObject(LwM2mId.SECURITY, Security.noSecBootstrap(uri.toString()));
+                    }
+                }
+                initializer.setClassForObject(LwM2mId.SERVER, Server.class);
+            }
         } catch (CertificateEncodingException e) {
             throw new IllegalStateException(e);
         }
@@ -147,6 +180,26 @@ public class LeshanTestClientBuilder extends LeshanClientBuilder {
         List<LwM2mObjectEnabler> objects = initializer.createAll();
         setObjects(objects);
         setRegistrationEngineFactory(engineFactory.setRequestTimeoutInMs(800));
+
+        // custom encoder/decoder with limited supported content format.
+        if (supportedContentFormat != null && supportedContentFormat.length > 0) {
+            final List<ContentFormat> supportedFormat = Arrays.asList(supportedContentFormat);
+            setDecoder(new DefaultLwM2mDecoder(true) {
+                @Override
+                public boolean isSupported(ContentFormat format) {
+                    return supportedFormat.contains(format);
+                }
+            });
+            setEncoder(new DefaultLwM2mEncoder(true) {
+                @Override
+                public boolean isSupported(ContentFormat format) {
+                    return supportedFormat.contains(format);
+                }
+            });
+        }
+        setDecoder(new DefaultLwM2mDecoder(true));
+        setEncoder(new DefaultLwM2mEncoder(true));
+
         return (LeshanTestClient) super.build();
     }
 
@@ -243,6 +296,11 @@ public class LeshanTestClientBuilder extends LeshanClientBuilder {
         return this;
     }
 
+    public LeshanTestClientBuilder connectingTo(LeshanBootstrapServer server) {
+        this.bootstrapServer = server;
+        return this;
+    }
+
     public LeshanTestClientBuilder using(PublicKey clientPublicKey, PrivateKey clientPrivateKey) {
         this.clientPrivateKey = clientPrivateKey;
         this.clientPublicKey = clientPublicKey;
@@ -282,6 +340,21 @@ public class LeshanTestClientBuilder extends LeshanClientBuilder {
 
     public LeshanTestClientBuilder using(OscoreSetting oscoreSetting) {
         this.oscoreSetting = oscoreSetting;
+        return this;
+    }
+
+    public LeshanTestClientBuilder preferring(ContentFormat contentFormat) {
+        this.engineFactory.setPreferredContentFormat(contentFormat);
+        return this;
+    }
+
+    public LeshanTestClientBuilder supporting(ContentFormat... supportedContentFormat) {
+        this.supportedContentFormat = supportedContentFormat;
+        return this;
+    }
+
+    public LeshanTestClientBuilder withBootstrap(Map<String, String> additionalAttributes) {
+        setBootstrapAdditionalAttributes(additionalAttributes);
         return this;
     }
 }

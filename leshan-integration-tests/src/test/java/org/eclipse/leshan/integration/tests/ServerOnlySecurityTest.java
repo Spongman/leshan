@@ -90,7 +90,7 @@ public class ServerOnlySecurityTest {
     /*---------------------------------/
      *  Parameterized Tests
      * -------------------------------*/
-    @ParameterizedTest(name = "COAPS - Server using {2}")
+    @ParameterizedTest(name = "COAPS - Server using {0}")
     @MethodSource("transports")
     @Retention(RetentionPolicy.RUNTIME)
     private @interface TestAllTransportLayer {

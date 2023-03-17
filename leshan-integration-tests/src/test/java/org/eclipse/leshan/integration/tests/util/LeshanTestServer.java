@@ -69,7 +69,7 @@ public class LeshanTestServer extends LeshanServer {
                 noQueueMode, awakeTimeProvider, registrationIdProvider, updateRegistrationOnNotification, linkParser,
                 serverSecurityInfo);
 
-        if (!(securityStore instanceof EditableSecurityStore)) {
+        if (securityStore != null && !(securityStore instanceof EditableSecurityStore)) {
             throw new IllegalStateException(
                     String.format("We need EditableSecurityStore for integrations tests. %s is not",
                             securityStore.getClass().getCanonicalName()));
@@ -248,7 +248,9 @@ public class LeshanTestServer extends LeshanServer {
         getRegistrationStore().getAllRegistrations()
                 .forEachRemaining(r -> getRegistrationStore().removeRegistration(r.getId()));
         // remove all registration on destroy
-        getSecurityStore().getAll().iterator().forEachRemaining(s -> getSecurityStore().remove(s.getEndpoint(), false));
+        if (getSecurityStore() != null)
+            getSecurityStore().getAll().iterator()
+                    .forEachRemaining(s -> getSecurityStore().remove(s.getEndpoint(), false));
     }
 
 }
